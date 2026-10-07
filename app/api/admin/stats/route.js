@@ -20,3 +20,4 @@ export async function GET() {
 
   return NextResponse.json({ totalTopics, totalArticles, drafts, published, rejected });
 }
+// step0-rebuild-marker

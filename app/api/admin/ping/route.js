@@ -11,3 +11,4 @@ export async function POST() {
   await pingSitemaps();
   return NextResponse.json({ ok: true, pinged: ['/sitemap.xml', '/sitemap-recent.xml'] });
 }
+// step0-rebuild-marker
