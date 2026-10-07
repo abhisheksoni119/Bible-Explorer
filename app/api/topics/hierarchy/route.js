@@ -128,6 +128,12 @@ export async function GET(request) {
   return NextResponse.json({
     _debug: {
       fetchedTopics: all.length,
+      parentCount: parents.length,
+      childCount: children.length,
+      orphanCount: orphans.length,
+      childMapKeys: Object.keys(childMap).length,
+      sampleChildParentIds: children.slice(0, 3).map(c => c.parent_id),
+      sampleParentIds: parents.slice(0, 3).map(p => p.id),
       capturedRequests: captures,
     },
     ...[...hierarchy, ...orphanNodes],
