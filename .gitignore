@@ -50,3 +50,5 @@ Thumbs.db
 .vercel
 .next
 .env
+.env.local 
+.env*.local
