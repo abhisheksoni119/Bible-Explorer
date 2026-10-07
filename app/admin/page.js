@@ -8,15 +8,17 @@ import Generator     from './_components/Generator.js';
 import BulkGenerator from './_components/BulkGenerator.js';
 import Topics        from './_components/Topics.js';
 import Articles      from './_components/Articles.js';
+import AiAssistant   from './_components/AiAssistant.js';
 
 const TABS = [
-  { id: 'dashboard', label: '📊 Dashboard' },
-  { id: 'seo',       label: '📈 SEO' },
-  { id: 'articles',  label: '📄 Articles' },
-  { id: 'generate',  label: '✦ Generate' },
-  { id: 'bulk',      label: '⚡ Bulk Generate' },
-  { id: 'topics',    label: '🗂 Topics' },
-  { id: 'new-urls',  label: '🔗 New URLs', href: '/admin/new-urls/' },
+  { id: 'dashboard',    label: '📊 Dashboard' },
+  { id: 'seo',          label: '📈 SEO' },
+  { id: 'articles',     label: '📄 Articles' },
+  { id: 'generate',     label: '✦ Generate' },
+  { id: 'bulk',         label: '⚡ Bulk Generate' },
+  { id: 'topics',       label: '🗂 Topics' },
+  { id: 'ai-assistant', label: '🤖 AI Assistant' },
+  { id: 'new-urls',     label: '🔗 New URLs', href: '/admin/new-urls/' },
 ];
 
 const VALID_TABS = new Set(TABS.filter(t => !t.href).map(t => t.id));
@@ -135,6 +137,7 @@ export default function AdminPage() {
         {activeTab === 'generate'  && <Generator  onSaved={handleSaved} />}
         {activeTab === 'bulk'      && <BulkGenerator onSaved={handleSaved} />}
         {activeTab === 'topics'    && <Topics />}
+        {activeTab === 'ai-assistant' && <AiAssistant />}
       </div>
     </div>
   );
