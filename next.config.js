@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+// STEP 0 (2026-10-08): config touched to invalidate Vercel build cache after
+// environment reconciliation, so every bundle re-inlines current env values.
 const replitDomain = process.env.REPLIT_DEV_DOMAIN;
 
 const nextConfig = {
