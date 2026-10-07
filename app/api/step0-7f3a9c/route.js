@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '../../../../lib/supabaseAdmin.js';
+import { supabaseAdmin } from '../../../lib/supabaseAdmin.js';
 
 // STEP 0 diagnostic v3 (temporary, branch-only). Interrogates the actual
 // supabaseAdmin singleton vs fresh clients. Returns refs/counts only.
