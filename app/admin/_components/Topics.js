@@ -100,7 +100,7 @@ export default function Topics() {
 
   async function load() {
     try {
-      const res = await fetch('/api/topics/hierarchy');
+      const res = await fetch('/api/topics-tree');
       const d   = await res.json();
       if (Array.isArray(d)) setHierarchy(d);
     } catch (err) {
