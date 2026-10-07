@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// STEP 0 diagnostic (temporary, branch-only). Returns counts + project refs only.
-// Never returns key material.
+// STEP 0 diagnostic v2 (temporary, branch-only). Bisection of the hierarchy query.
+// Returns counts/refs only — never key material.
 
 const YNFTZ_URL = 'https://ynftzpgjsnoyjovotpua.supabase.co';
 
@@ -17,44 +17,58 @@ function jwtRef(key) {
   }
 }
 
-async function topicsCensus(url, key) {
+async function runStep(url, key, label, buildQuery) {
   try {
-    const c = createClient(url, key, { auth: { persistSession: false } });
-    const { count, error } = await c.from('topics').select('id', { count: 'exact', head: true });
-    if (error) return { error: error.message };
-    const { data: sample, error: e2 } = await c
-      .from('topics')
-      .select('name, category')
-      .order('created_at', { ascending: false })
-      .limit(6);
-    const { count: artCount, error: e3 } = await c.from('articles').select('id', { count: 'exact', head: true });
-    const { count: pubCount, error: e4 } = await c
-      .from('articles')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'published');
+    const c = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error, count } = await buildQuery(c);
     return {
-      topicsCount: count,
-      articlesCount: artCount,
-      publishedCount: pubCount,
-      newestTopics: (sample || []).map(t => t.name),
-      errors: [e2 && e2.message, e3 && e3.message, e4 && e4.message].filter(Boolean),
+      label,
+      error: error ? error.message : null,
+      rowCount: data ? data.length : null,
+      exactCount: count === undefined || count === null ? '(not requested)' : count,
+      first3: data ? data.slice(0, 3).map(r => r.name || r.id) : null,
     };
   } catch (e) {
-    return { error: e.message };
+    return { label, error: e.message };
   }
 }
 
 export async function GET() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  const runtimeUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '(unset)';
+  const runtimeUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+
+  const steps = [];
+
+  // 1. exact replica of lib/supabaseAdmin.js + fetchAllTopics
+  steps.push(await runStep(YNFTZ_URL, serviceKey, 'REPLICA service+allcols+order+range', c =>
+    c.from('topics').select('id, name, category, parent_id, is_pillar').order('name').range(0, 999)));
+
+  // 2. same minus range
+  steps.push(await runStep(YNFTZ_URL, serviceKey, 'service+allcols+order (no range)', c =>
+    c.from('topics').select('id, name, category, parent_id, is_pillar').order('name')));
+
+  // 3. same minus order
+  steps.push(await runStep(YNFTZ_URL, serviceKey, 'service+allcols (no order/range)', c =>
+    c.from('topics').select('id, name, category, parent_id, is_pillar')));
+
+  // 4. minimal columns
+  steps.push(await runStep(YNFTZ_URL, serviceKey, 'service+id-only', c =>
+    c.from('topics').select('id')));
+
+  // 5. anon equivalent of hierarchy query
+  steps.push(await runStep(YNFTZ_URL, anonKey, 'ANON+allcols+order+range', c =>
+    c.from('topics').select('id, name, category, parent_id, is_pillar').order('name').range(0, 999)));
+
+  // 6. what the guides page does (anon topics for guides category)
+  steps.push(await runStep(YNFTZ_URL, anonKey, 'ANON guides-category topics', c =>
+    c.from('topics').select('id').eq('category', 'guides')));
 
   const result = {
-    runtimeUrlRef: runtimeUrl.includes('supabase.co') ? runtimeUrl.replace('https://', '').split('.')[0] : runtimeUrl,
+    runtimeUrlRef: runtimeUrl ? (runtimeUrl.includes('supabase.co') ? runtimeUrl.replace('https://', '').split('.')[0] : runtimeUrl) : '(unset)',
     anonKey: jwtRef(anonKey),
     serviceKey: jwtRef(serviceKey),
-    anon_census_on_ynftz: anonKey ? await topicsCensus(YNFTZ_URL, anonKey) : { error: 'no anon key in runtime env' },
-    service_census_on_ynftz: serviceKey ? await topicsCensus(YNFTZ_URL, serviceKey) : { error: 'no service key in runtime env' },
+    steps,
   };
   return NextResponse.json(result);
 }
