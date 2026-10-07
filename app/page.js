@@ -94,10 +94,12 @@ export default async function Home() {
 
   if (supabase) {
     // Step 1 — fetch ALL topics in one query
-    const { data: allTopics = [] } = await supabase
+    const { data: allTopicsData, error: topicsError } = await supabase
       .from('topics')
       .select('id, name, category')
       .order('name');
+    if (topicsError) console.error('[Home] topics query failed:', topicsError.message);
+    const allTopics = Array.isArray(allTopicsData) ? allTopicsData : [];
 
     const byCategory = (cat) =>
       allTopics.filter(t => t.category?.toLowerCase() === cat.toLowerCase()).map(t => t.id);
