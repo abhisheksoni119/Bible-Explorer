@@ -5,7 +5,7 @@
   "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "next dev -p ${PORT:-5000} -H 0.0.0.0",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -p ${PORT:-5000} -H 0.0.0.0",
     "seed": "node prisma/seed.mjs"
   },
@@ -37,5 +37,12 @@
   },
   "overrides": {
     "postcss": "^8.5.10"
+  },
+  "allowScripts": {
+    "prisma@5.22.0": true,
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "better-sqlite3@12.9.0": true,
+    "sharp@0.34.5": true
   }
 }
