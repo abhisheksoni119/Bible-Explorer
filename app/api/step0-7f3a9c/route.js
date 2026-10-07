@@ -2,9 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '../../../../lib/supabaseAdmin.js';
 
-// STEP 0 diagnostic v2 (temporary, branch-only). Bisection of the hierarchy query.
-// Returns counts/refs only — never key material.
+// STEP 0 diagnostic v3 (temporary, branch-only). Interrogates the actual
+// supabaseAdmin singleton vs fresh clients. Returns refs/counts only.
 
 const YNFTZ_URL = 'https://ynftzpgjsnoyjovotpua.supabase.co';
 
@@ -17,16 +18,19 @@ function jwtRef(key) {
   }
 }
 
-async function runStep(url, key, label, buildQuery) {
+async function topicsSample(client, label) {
   try {
-    const c = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data, error, count } = await buildQuery(c);
+    const { data, error } = await client
+      .from('topics')
+      .select('id, name, category, parent_id, is_pillar')
+      .order('name')
+      .range(0, 999);
+    if (error) return { label, error: error.message };
     return {
       label,
-      error: error ? error.message : null,
-      rowCount: data ? data.length : null,
-      exactCount: count === undefined || count === null ? '(not requested)' : count,
-      first3: data ? data.slice(0, 3).map(r => r.name || r.id) : null,
+      rowCount: data.length,
+      first3: data.slice(0, 3).map(r => r.name),
+      germanCount: data.filter(r => /[äöüÄÖÜß]/.test(r.name)).length,
     };
   } catch (e) {
     return { label, error: e.message };
@@ -34,41 +38,31 @@ async function runStep(url, key, label, buildQuery) {
 }
 
 export async function GET() {
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const runtimeUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '(unset)';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  const runtimeUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
-  const steps = [];
+  // 1. What does the deployed singleton hold, and what does it see?
+  const singletonUrl = supabaseAdmin && supabaseAdmin.supabaseUrl ? supabaseAdmin.supabaseUrl : '(n/a)';
+  const viaSingleton = supabaseAdmin ? await topicsSample(supabaseAdmin, 'VIA supabaseAdmin singleton') : { label: 'singleton null' };
 
-  // 1. exact replica of lib/supabaseAdmin.js + fetchAllTopics
-  steps.push(await runStep(YNFTZ_URL, serviceKey, 'REPLICA service+allcols+order+range', c =>
-    c.from('topics').select('id, name, category, parent_id, is_pillar').order('name').range(0, 999)));
+  // 2. Fresh client on the runtime env URL with runtime service key
+  const freshRuntime = serviceKey && runtimeUrl !== '(unset)'
+    ? await topicsSample(createClient(runtimeUrl, serviceKey, { auth: { persistSession: false } }), 'FRESH runtime-url + service-key')
+    : { label: 'skipped (missing url/key)' };
 
-  // 2. same minus range
-  steps.push(await runStep(YNFTZ_URL, serviceKey, 'service+allcols+order (no range)', c =>
-    c.from('topics').select('id, name, category, parent_id, is_pillar').order('name')));
+  // 3. Fresh client hardcoded to ynftz with runtime service key
+  const freshHardcoded = serviceKey
+    ? await topicsSample(createClient(YNFTZ_URL, serviceKey, { auth: { persistSession: false } }), 'FRESH hardcoded-ynftz + service-key')
+    : { label: 'skipped (missing key)' };
 
-  // 3. same minus order
-  steps.push(await runStep(YNFTZ_URL, serviceKey, 'service+allcols (no order/range)', c =>
-    c.from('topics').select('id, name, category, parent_id, is_pillar')));
-
-  // 4. minimal columns
-  steps.push(await runStep(YNFTZ_URL, serviceKey, 'service+id-only', c =>
-    c.from('topics').select('id')));
-
-  // 5. anon equivalent of hierarchy query
-  steps.push(await runStep(YNFTZ_URL, anonKey, 'ANON+allcols+order+range', c =>
-    c.from('topics').select('id, name, category, parent_id, is_pillar').order('name').range(0, 999)));
-
-  // 6. what the guides page does (anon topics for guides category)
-  steps.push(await runStep(YNFTZ_URL, anonKey, 'ANON guides-category topics', c =>
-    c.from('topics').select('id').eq('category', 'guides')));
-
-  const result = {
-    runtimeUrlRef: runtimeUrl ? (runtimeUrl.includes('supabase.co') ? runtimeUrl.replace('https://', '').split('.')[0] : runtimeUrl) : '(unset)',
-    anonKey: jwtRef(anonKey),
+  return NextResponse.json({
+    singletonUrlRef: String(singletonUrl).includes('supabase.co')
+      ? String(singletonUrl).replace('https://', '').split('.')[0]
+      : singletonUrl,
+    runtimeUrlRef: runtimeUrl.includes('supabase.co') ? runtimeUrl.replace('https://', '').split('.')[0] : runtimeUrl,
     serviceKey: jwtRef(serviceKey),
-    steps,
-  };
-  return NextResponse.json(result);
+    viaSingleton,
+    freshRuntime,
+    freshHardcoded,
+  });
 }
