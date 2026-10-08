@@ -5,6 +5,7 @@ import { supabaseAdmin as supabase } from '../../../../lib/supabaseAdminClient.j
 import { sanitiseSlug, getPrompt, buildTitleHint, callOpenRouter, enforceArticleMeta, candidateSlugs } from '../../../../lib/generator.js';
 import { enrichContent } from '../../../../lib/seoEnrich.js';
 import { sanitizeForPg } from '../../../../lib/sanitizeForPg.js';
+import { verifyReferencesInHtml } from '../../../../lib/verseValidation.js';
 
 const AUTHOR_NAME = 'BVI Team';
 const AUTHOR_SLUG = 'bvi-team';
@@ -154,9 +155,19 @@ HARD RULES:
 
     const { html: enrichedContent } = await enrichContent(generated.content || '');
 
+    // Phase 4: verify every Bible reference in the generated content against
+    // the KJV source. The draft is NOT blocked on unverified refs, but the
+    // reviewer sees exactly what could not be confirmed before saving.
+    let validation = null;
+    try {
+      validation = await verifyReferencesInHtml(enrichedContent || '');
+    } catch (e) {
+      validation = { checked: 0, verified: 0, unverified: [], error: e.message };
+    }
+
     // Pre-sanitize the preview so the values the user sees are exactly what
     // will be inserted (the save endpoint also sanitizes as a safety net).
-    return NextResponse.json(sanitizeForPg({
+    const payload = sanitizeForPg({
       title:            finalTitle,
       slug:             baseSlug,
       meta_title:       generated.meta_title,
@@ -169,7 +180,9 @@ HARD RULES:
       author_name:      AUTHOR_NAME,
       author_slug:      AUTHOR_SLUG,
       _meta: { is_pillar: isPillar, article_created: articleCreated, category },
-    }));
+    });
+
+    return NextResponse.json({ ...payload, _validation: validation });
   } catch (err) {
     console.error('[admin/generate]', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

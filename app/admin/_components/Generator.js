@@ -540,6 +540,21 @@ export default function Generator({ onSaved }) {
             </div>
           )}
 
+          {preview._validation && (
+            <div style={{
+              marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontSize: '0.85rem',
+              background: preview._validation.unverified?.length ? '#fffbeb' : '#f0fdf4',
+              border: preview._validation.unverified?.length ? '1px solid #fde68a' : '1px solid #bbf7d0',
+              color: preview._validation.unverified?.length ? '#854d0e' : '#166534',
+            }}>
+              {preview._validation.checked === 0
+                ? '📖 No Bible references detected in this draft — verify manually before publishing.'
+                : preview._validation.unverified?.length === 0
+                  ? `✓ Bible grounding: all ${preview._validation.verified} reference(s) verified against the KJV source.`
+                  : `⚠ Bible grounding: ${preview._validation.verified}/${preview._validation.checked} reference(s) verified. Could not verify: ${preview._validation.unverified.join(', ')} — check these manually before publishing.`}
+            </div>
+          )}
+
           <details>
             <summary style={{ cursor: 'pointer', color: '#8b7355', fontSize: '0.85rem', userSelect: 'none', padding: '0.5rem 0' }}>
               Content Preview

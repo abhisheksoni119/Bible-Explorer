@@ -48,6 +48,11 @@ KEEP INTACT:
 
 RETURN: The improved article as a valid HTML string only. No JSON wrapper. No explanation. No preamble. Just the HTML content starting with a <p> or <h2> tag.`;
 
+// Plain-text word count for the change summary
+function words(html) {
+  return (String(html || '').replace(/<[^>]+>/g, ' ').match(/[A-Za-z']+/g) || []).length;
+}
+
 export async function POST(request, { params }) {
   try {
     const { id } = await params;
@@ -55,6 +60,8 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 503 });
     }
 
+    // Review-first: this route NEVER writes. It returns a proposal the admin
+    // reviews in the editor; saving happens only via an explicit user action.
     const { data: article, error: articleError } = await supabase
       .from('articles').select('*, topics(name, category)').eq('id', id).single();
 
@@ -73,18 +80,21 @@ export async function POST(request, { params }) {
 
     const { html: enrichedContent } = await enrichContent(improvedHtml);
 
-    const { data: updated, error: updateError } = await supabase
-      .from('articles')
-      .update({ content: enrichedContent })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
-
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      id: article.id,
+      slug: article.slug,
+      title: article.title,
+      status: article.status,
+      meta_title: article.meta_title,
+      meta_description: article.meta_description,
+      topics: article.topics,
+      content: enrichedContent,
+      reviewFirst: true,
+      summary: {
+        wordsBefore: words(article.content),
+        wordsAfter: words(enrichedContent),
+      },
+    });
   } catch (err) {
     console.error('[improve]', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

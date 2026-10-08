@@ -154,6 +154,16 @@ function EditModal({ article, onSave, onClose }) {
             ✓ Content upgraded by AI — review the changes below, then save when ready.
           </div>
         )}
+        {article._aiProposal && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', borderRadius: '0.5rem', padding: '0.65rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+            ✦ AI improvement proposal — <strong>nothing is saved yet.</strong> Review the proposed content below (edit freely), then choose Save Draft or Publish. Current live version stays untouched until you save.
+            {article._summary && (
+              <span style={{ display: 'block', marginTop: '0.3rem', color: '#64748b' }}>
+                Length: {article._summary.wordsBefore} → {article._summary.wordsAfter} words
+              </span>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
           <div style={S.fieldWrap}>
@@ -446,8 +456,15 @@ export default function Articles({ initialArticleId = null }) {
       if (!res.ok) {
         setToast({ status: 'error', message: data.error || 'Something went wrong' });
       } else {
-        setArticles(prev => prev.map(a => a.id === data.id ? data : a));
-        setToast({ status: 'success', message: `"${article.title}" rewritten and enriched.` });
+        // Review-first: load the AI proposal into the editor — nothing is
+        // saved until the user explicitly saves in the editor.
+        setEditing({
+          ...article,
+          content:      data.content,
+          _aiProposal:  true,
+          _summary:     data.summary,
+        });
+        setToast({ status: 'success', message: `"${article.title}" — AI proposal loaded into the editor. Review, then Save.` });
       }
     } catch (err) { setToast({ status: 'error', message: err.message }); }
     finally { setImproving(prev => { const s = new Set(prev); s.delete(article.id); return s; }); }
@@ -724,7 +741,7 @@ export default function Articles({ initialArticleId = null }) {
                             onClick={() => improveArticle(a)}
                             style={{ ...S.btn('improve'), minWidth: '4.5rem' }}
                             disabled={rowDisabled}
-                            title="Rewrite with AI — saves automatically"
+                            title="Rewrite with AI — loads a proposal into the editor for review (nothing saves automatically)"
                           >
                             {isImproving ? '…' : '✦ Improve'}
                           </button>
