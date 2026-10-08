@@ -19,6 +19,11 @@ function isProtected(pathname) {
   if (pathname.startsWith('/admin/') && !pathname.startsWith('/admin/login')) return true;
   if (pathname === '/admin') return true;
   if (pathname.startsWith('/api/admin/')) return true;
+  // Legacy unauthenticated write/generation endpoints (unused by the site UI).
+  // Gate them behind admin auth so they cannot be invoked publicly.
+  if (pathname.startsWith('/api/generate-question')) return true;
+  if (pathname.startsWith('/api/save-question')) return true;
+  if (pathname.startsWith('/api/generate-ideas')) return true;
   return false;
 }
 
@@ -35,10 +40,16 @@ export async function middleware(request) {
   if (isProtected(pathname)) {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
       return NextResponse.redirect(new URL('/admin/login/', request.url));
     }
     const expected = await computeAdminToken();
     if (token !== expected) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
       const response = NextResponse.redirect(new URL('/admin/login/', request.url));
       response.cookies.set('admin_token', '', { maxAge: 0, path: '/' });
       return response;

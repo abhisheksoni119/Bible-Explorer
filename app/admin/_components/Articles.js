@@ -238,6 +238,7 @@ export default function Articles({ initialArticleId = null }) {
     category: '',
   });
   const [filterSpecial, setFilterSpecial] = useState('');
+  const [search, setSearch]           = useState('');
   const [editing,       setEditing]       = useState(null);
   // Track which deep-link IDs we've already auto-opened to avoid loops
   // when the same component remounts with the same prop.
@@ -323,11 +324,10 @@ export default function Articles({ initialArticleId = null }) {
     return () => { cancelled = true; };
   }, [initialArticleId, loading, articles, autoOpenedId]);
 
-  const displayArticles = useMemo(() => {
-    if (filterSpecial === 'orphan')  return articles.filter(a => isThinArticle(a.content));
+    if (filterSpecial === 'thin')    return articles.filter(a => isThinArticle(a.content));
     if (filterSpecial === 'no-meta') return articles.filter(a => !a.meta_description?.trim());
     return articles;
-  }, [articles, filterSpecial]);
+  }, [articles, filterSpecial, search]);
 
   const allSelected = displayArticles.length > 0 && displayArticles.every(a => selectedIds.has(a.id));
   const nSelected   = selectedIds.size;
@@ -541,8 +541,16 @@ export default function Articles({ initialArticleId = null }) {
           {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
         </select>
 
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search title or slug…"
+          style={{ ...S.select, minWidth: '190px' }}
+        />
+
         <select value={filterSpecial} onChange={e => { setFilterSpecial(e.target.value); setSelectedIds(new Set()); }} style={S.select}>
-          <option value="">No special filter</option>
+          <option value="thin">Thin content (under {THIN_CHARS} chars)</option>
           <option value="orphan">Orphan (thin content &lt;{THIN_CHARS} chars)</option>
           <option value="no-meta">Missing meta description</option>
         </select>
@@ -558,27 +566,11 @@ export default function Articles({ initialArticleId = null }) {
         </button>
 
         <button
-          onClick={handleImportLegacy} disabled={importing}
-          title="Import all legacy static content (topics, questions, guides) into the database as drafts"
-          style={{ ...S.btn('import'), padding: '0.4rem 0.85rem', opacity: importing ? 0.6 : 1 }}
-        >
-          {importing ? '⟳ Importing…' : '⬇ Import Legacy'}
-        </button>
-
-        <button
           onClick={() => fixDraftTitles(false)} disabled={fixingDrafts}
           title="Fix titles and slugs of all draft articles to match the correct format for their category (e.g. 'Bible Verses About X')"
           style={{ ...S.btn('upgrade'), padding: '0.4rem 0.85rem', opacity: fixingDrafts ? 0.6 : 1 }}
         >
           {fixingDrafts ? '⟳ Fixing…' : '✎ Fix Draft Titles'}
-        </button>
-
-        <button
-          onClick={handlePing} disabled={pinging}
-          title="Ping Google with sitemap.xml and sitemap-recent.xml to request faster indexing. Does not modify any content."
-          style={{ ...S.btn('default'), padding: '0.4rem 0.85rem', opacity: pinging ? 0.6 : 1, background: '#e0f2fe', color: '#0369a1' }}
-        >
-          {pinging ? '⟳ Pinging…' : '📡 Run Indexing Boost'}
         </button>
       </div>
 
