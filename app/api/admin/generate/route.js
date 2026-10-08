@@ -71,8 +71,12 @@ function publishedCollision(existing, kind) {
 
 export async function POST(request) {
   try {
-    const { topicId, topicName, idea, language: rawLang } = await request.json();
+    const { topicId, topicName, idea, language: rawLang, allowTopicMultiple: rawMultiple } = await request.json();
     const language = (rawLang || 'en').toString().toLowerCase().trim();
+    // Multi-article mode: the caller explicitly asks for a DISTINCT article
+    // for a topic that already has one (different search intent). Duplicate
+    // protection still applies at the slug level (Step 2/Step 4).
+    const allowTopicMultiple = rawMultiple === true;
 
     if (!topicName?.trim()) return NextResponse.json({ error: 'topicName is required' }, { status: 400 });
 
@@ -91,8 +95,12 @@ export async function POST(request) {
       if (topic?.article_created) articleCreated = true;
     }
 
-    // Step 1: topic-level check. Block PUBLISHED, auto-delete draft.
-    if (topicId) {
+    // Step 1: topic-level check.
+    //  - Default (one article per topic): block PUBLISHED, auto-delete draft.
+    //  - Multi-article mode: a published article on this topic does NOT block
+    //    a distinct new intent — only slug collisions block (Steps 2 & 4) —
+    //    and existing drafts are left untouched (never delete other intents).
+    if (topicId && !allowTopicMultiple) {
       const existing = await getExistingArticleForTopic(topicId);
       const blocked = publishedCollision(existing, 'topic');
       if (blocked) return blocked;

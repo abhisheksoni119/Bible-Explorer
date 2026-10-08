@@ -1,0 +1,21 @@
+-- 002: Enable multiple distinct articles per topic
+-- ============================================================
+-- PURPOSE
+--   Removes the one-article-per-topic database constraint so a topic can
+--   hold several genuinely distinct articles (different search intents).
+--   Duplicate-intent protection is enforced in the application layer
+--   (slug collisions, published-article checks) — not by this constraint.
+--
+-- SAFETY
+--   Additive-capability only: no rows are touched, no columns change.
+--   Reversible at any time (see below).
+--
+-- IDEMPOTENT: safe to run multiple times.
+--
+-- REVERT (re-apply the one-article-per-topic rule):
+--   Only after confirming no topic has more than one article:
+--     ALTER TABLE articles
+--       ADD CONSTRAINT unique_topic_article UNIQUE (topic_id);
+-- ============================================================
+
+ALTER TABLE articles DROP CONSTRAINT IF EXISTS unique_topic_article;

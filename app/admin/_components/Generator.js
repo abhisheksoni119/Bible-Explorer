@@ -36,6 +36,7 @@ export default function Generator({ onSaved }) {
 
   const [idea,            setIdea]            = useState('');
   const [usedIdeaId,      setUsedIdeaId]      = useState(null);
+  const [allowMultiple,   setAllowMultiple]   = useState(false);
   const [ideas,           setIdeas]           = useState([]);
   const [ideasLoading,    setIdeasLoading]    = useState(false);
   const [generatingIdeas, setGeneratingIdeas] = useState(false);
@@ -73,7 +74,7 @@ export default function Generator({ onSaved }) {
 
   function selectTopic(topic) {
     setSelectedTopic(topic);
-    setIdea(''); setUsedIdeaId(null); setError(''); setDuplicate(null);
+    setIdea(''); setUsedIdeaId(null); setAllowMultiple(false); setError(''); setDuplicate(null);
     setIdeas([]); setPreview(null); setSaved(false);
     fetchIdeasById(topic.id);
   }
@@ -119,7 +120,12 @@ export default function Generator({ onSaved }) {
       const res  = await fetch('/api/admin/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topicId: selectedTopic.id, topicName: selectedTopic.name, idea: idea.trim() }),
+        body: JSON.stringify({
+          topicId: selectedTopic.id,
+          topicName: selectedTopic.name,
+          idea: idea.trim(),
+          allowTopicMultiple: allowMultiple && Boolean(idea.trim()),
+        }),
       });
       const data = await res.json();
       if (res.status === 409) {
@@ -142,7 +148,7 @@ export default function Generator({ onSaved }) {
       const res  = await fetch('/api/admin/articles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...preview, status: publish ? 'published' : 'draft' }),
+        body: JSON.stringify({ ...preview, status: publish ? 'published' : 'draft', allowTopicMultiple: allowMultiple && Boolean(idea.trim()) }),
       });
       const data = await res.json();
       if (res.status === 409) {
@@ -399,6 +405,23 @@ export default function Generator({ onSaved }) {
                 placeholder="e.g. how to forgive someone, overcoming doubt"
                 style={S.input}
               />
+              {selectedTopic.article_created && (
+                <div style={{ marginTop: '0.6rem', fontSize: '0.82rem', color: '#5a4a35', background: '#faf7ee', border: '1px solid #e8dfc8', borderRadius: '0.4rem', padding: '0.55rem 0.75rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.45rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={allowMultiple}
+                      onChange={e => setAllowMultiple(e.target.checked)}
+                      style={{ marginTop: '0.15rem', accentColor: '#1e2d4a' }}
+                    />
+                    <span>
+                      This topic already has an article. <strong>Create a distinct supporting article</strong> for it
+                      (type a specific idea above — e.g. a narrower angle). Requires the multi-article database migration
+                      (docs/migrations/002). A published article with the same URL is still protected and will never be overwritten.
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
 
             {duplicate && (

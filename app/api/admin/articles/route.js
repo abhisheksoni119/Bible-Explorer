@@ -75,19 +75,26 @@ export async function POST(request) {
       keywords, related_slugs, topic_id, status = 'draft',
       author_name, author_slug,
       language: rawLang,
+      allowTopicMultiple: rawMultiple,
       // _meta is a client-only hint from the generate route — never insert into DB
       _meta: _ignoredMeta,
       ...rest
     } = body;
 
     const language = (rawLang || 'en').toString().toLowerCase().trim();
+    // Multi-article mode: allow a distinct article on a topic that already
+    // has one. Slug-level duplicate protection below still applies, and the
+    // database's unique_topic_article constraint (if still present) is
+    // reported with actionable guidance on conflict.
+    const allowTopicMultiple = rawMultiple === true;
 
     if (!title?.trim()) return NextResponse.json({ error: 'title is required' }, { status: 400 });
     if (!slug?.trim())  return NextResponse.json({ error: 'slug is required' },  { status: 400 });
 
     // THE ONE RULE: PUBLISHED is sacred. Anything else is auto-replaced.
-    // 1) Topic check
-    if (topic_id) {
+    // 1) Topic check — skipped in multi-article mode (distinct intents are
+    //    allowed on the same topic; slug collisions are still blocked in (2)).
+    if (topic_id && !allowTopicMultiple) {
       const { data: existing } = await supabase
         .from('articles')
         .select('id, title, slug, status, language, topics(category)')
