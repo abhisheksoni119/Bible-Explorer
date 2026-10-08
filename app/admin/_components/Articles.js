@@ -213,6 +213,15 @@ function EditModal({ article, onSave, onClose }) {
                 Length: {article._summary.wordsBefore} → {article._summary.wordsAfter} words
               </span>
             )}
+            {article._validation && (
+              <span style={{ display: 'block', marginTop: '0.3rem', color: article._validation.unverified?.length ? '#b45309' : '#15803d' }}>
+                {article._validation.checked === 0
+                  ? '📖 No Bible references detected in the proposal — verify manually.'
+                  : article._validation.unverified?.length === 0
+                    ? `✓ Bible grounding: all ${article._validation.verified} reference(s) verified against KJV.`
+                    : `⚠ Bible grounding: ${article._validation.verified}/${article._validation.checked} verified. Check: ${article._validation.unverified.join(', ')}`}
+              </span>
+            )}
           </div>
         )}
 
@@ -419,10 +428,22 @@ export default function Articles({ initialArticleId = null }) {
   }, [initialArticleId, loading, articles, autoOpenedId]);
 
   const displayArticles = useMemo(() => {
-    if (filterSpecial === 'thin')    return articles.filter(a => isThinArticle(a.content));
-    if (filterSpecial === 'no-meta') return articles.filter(a => !a.meta_description?.trim());
-    return articles;
+    let list = articles;
+    if (filterSpecial === 'thin')    return list.filter(a => isThinArticle(a.content));
+    if (filterSpecial === 'no-meta') return list.filter(a => !a.meta_description?.trim());
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(a => a.title?.toLowerCase().includes(q) || a.slug?.toLowerCase().includes(q));
+    }
+    return list;
   }, [articles, filterSpecial, search]);
+
+  // Live per-status counts for the filter dropdown (computed from loaded data)
+  const statusCounts = useMemo(() => {
+    const c = { draft: 0, published: 0, rejected: 0 };
+    for (const a of articles) if (c[a.status] !== undefined) c[a.status]++;
+    return c;
+  }, [articles]);
 
   const allSelected = displayArticles.length > 0 && displayArticles.every(a => selectedIds.has(a.id));
   const nSelected   = selectedIds.size;
@@ -549,6 +570,7 @@ export default function Articles({ initialArticleId = null }) {
           content:         data.content,
           _aiProposal:     true,
           _summary:        data.summary,
+          _validation:     data.validation || null,
         });
         setToast({ status: 'success', message: `"${article.title}" — AI proposal loaded into the editor. Review, then Save.` });
       }
@@ -634,10 +656,10 @@ export default function Articles({ initialArticleId = null }) {
         </span>
 
         <select value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))} style={S.select}>
-          <option value="">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="published">Published</option>
-          <option value="rejected">Rejected</option>
+          <option value="">All statuses ({articles.length})</option>
+          <option value="draft">Draft ({statusCounts.draft})</option>
+          <option value="published">Published ({statusCounts.published})</option>
+          <option value="rejected">Rejected ({statusCounts.rejected})</option>
         </select>
 
         <select value={filter.category} onChange={e => setFilter(f => ({ ...f, category: e.target.value }))} style={S.select}>

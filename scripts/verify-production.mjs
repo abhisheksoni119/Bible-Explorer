@@ -36,6 +36,17 @@ function check(name, cond, detail) {
     check('sample article ' + guideLinks[0], a.status === 200, 'HTTP ' + a.status);
   }
 
+  // Sample question page (first questions link)
+  const qLinks = (smText.match(/\/questions\/[a-z0-9-]+\//g) || []).filter(u => !u.includes('/api/'));
+  if (qLinks[0]) {
+    const q = await fetch(BASE + qLinks[0]);
+    check('sample question ' + qLinks[0], q.status === 200, 'HTTP ' + q.status);
+  }
+
+  // Admin login page reachable (unauthenticated)
+  const login = await fetch(BASE + '/admin/login/');
+  check('admin login page', login.status === 200, 'HTTP ' + login.status);
+
   // Admin security gates
   const gq = await fetch(BASE + '/api/generate-question/', { method: 'POST', redirect: 'manual' });
   check('generate-question gated', gq.status === 401 || gq.status === 307, 'HTTP ' + gq.status);
@@ -43,6 +54,8 @@ function check(name, cond, detail) {
   check('save-question gated', sq.status === 401 || sq.status === 307, 'HTTP ' + sq.status);
   const adm = await fetch(BASE + '/api/admin/stats/', { redirect: 'manual' });
   check('admin API gated', adm.status === 401 || adm.status === 307, 'HTTP ' + adm.status);
+  const arts = await fetch(BASE + '/api/admin/articles/', { redirect: 'manual' });
+  check('admin articles API gated', arts.status === 401 || arts.status === 307, 'HTTP ' + arts.status);
 
   // Admin topic-tree source (reads the production topics table)
   const tree = await fetch(BASE + '/api/topics-tree/');

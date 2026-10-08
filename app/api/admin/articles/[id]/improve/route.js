@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '../../../../../../lib/supabaseAdminClient.js';
 import { callOpenRouter } from '../../../../../../lib/generator.js';
 import { enrichContent } from '../../../../../../lib/seoEnrich.js';
+import { verifyReferencesInHtml } from '../../../../../../lib/verseValidation.js';
 
 const IMPROVE_SYSTEM_PROMPT = `You are a senior Christian content editor with 15 years of experience improving Bible study articles. You rewrite content to sound genuinely human — not robotic, not generic, not AI-generated. You keep the original meaning and doctrinal stance intact while making the writing more engaging, clearer, and practically valuable. You respond with the improved HTML only, exactly as instructed.`;
 
@@ -80,6 +81,15 @@ export async function POST(request, { params }) {
 
     const { html: enrichedContent } = await enrichContent(improvedHtml);
 
+    // Phase 4 visibility: ground-check the proposal's Bible references so the
+    // reviewer sees verification status before deciding to save.
+    let validation = null;
+    try {
+      validation = await verifyReferencesInHtml(enrichedContent || '');
+    } catch (e) {
+      validation = { checked: 0, verified: 0, unverified: [], error: e.message };
+    }
+
     return NextResponse.json({
       id: article.id,
       slug: article.slug,
@@ -90,6 +100,7 @@ export async function POST(request, { params }) {
       topics: article.topics,
       content: enrichedContent,
       reviewFirst: true,
+      validation,
       summary: {
         wordsBefore: words(article.content),
         wordsAfter: words(enrichedContent),
