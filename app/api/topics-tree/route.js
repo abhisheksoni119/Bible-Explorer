@@ -14,11 +14,11 @@ function getClient() {
   if (!key) return null;
   return createClient(SUPABASE_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: (input, init) => fetch(input, {
-      ...init,
-      cache: 'no-store',
-      headers: { ...(init && init.headers), 'x-step0-nocache': String(Date.now()) },
-    }) },
+    global: { fetch: (input, init) => {
+      const headers = new Headers(init && init.headers);
+      headers.set('x-step0-nocache', String(Date.now()));
+      return fetch(input, { ...init, cache: 'no-store', headers });
+    } },
   });
 }
 
