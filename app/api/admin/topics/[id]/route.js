@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '../../../../../lib/supabaseAdmin.js';
+import { supabaseAdmin as supabase } from '../../../../../lib/supabaseAdminClient.js';
 
 function isSchemaError(msg = '') {
   return msg.includes('does not exist') || msg.includes('column') || msg.includes('schema cache');

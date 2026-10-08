@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { supabaseAdmin as supabase } from '../../../../lib/supabaseAdmin.js';
+import { supabaseAdmin as supabase } from '../../../../lib/supabaseAdminClient.js';
 import { sanitiseSlug, getPrompt, buildTitleHint, callOpenRouter, enforceArticleMeta, candidateSlugs } from '../../../../lib/generator.js';
 import { enrichContent } from '../../../../lib/seoEnrich.js';
 import { sanitizeForPg } from '../../../../lib/sanitizeForPg.js';

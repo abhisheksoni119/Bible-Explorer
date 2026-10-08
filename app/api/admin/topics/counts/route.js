@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '../../../../../lib/supabaseAdmin.js';
+import { supabaseAdmin as supabase } from '../../../../../lib/supabaseAdminClient.js';
 
 // PostgREST caps single responses at 1000 rows — must paginate.
 async function fetchAllPaginated(table, select) {

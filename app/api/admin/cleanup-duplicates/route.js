@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '../../../../lib/supabaseAdmin.js';
+import { supabaseAdmin as supabase } from '../../../../lib/supabaseAdminClient.js';
 
 const STATUS_RANK = { published: 0, draft: 1, rejected: 2 };
 
