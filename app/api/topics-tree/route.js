@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '../../../lib/supabaseAdminClient.js';
+import { getNoStoreSupabase as getClient } from '../../../lib/articlePage.js';
 
 async function fetchAllTopics() {
+  const supabase = getClient();
+  if (!supabase) return { data: null, error: { message: 'Supabase not configured' } };
   const batchSize = 1000;
   let all = [];
   let from = 0;
@@ -21,7 +23,7 @@ async function fetchAllTopics() {
   return { data: all, error: null };
 }
 
-async function fetchPublishedCounts() {
+async function fetchPublishedCounts(supabase) {
   const batchSize = 5000;
   let all = [];
   let from = 0;
@@ -62,8 +64,8 @@ export async function GET(request) {
   const category = searchParams.get('category') || null;
 
   const [{ data, error }, countMap] = await Promise.all([
-    fetchAllTopics(),
-    fetchPublishedCounts(),
+    fetchAllTopics(getClient()),
+    fetchPublishedCounts(getClient()),
   ]);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
