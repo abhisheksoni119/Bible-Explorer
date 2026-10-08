@@ -1,7 +1,21 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getNoStoreSupabase as getClient } from '../../../lib/articlePage.js';
+import { createClient } from '@supabase/supabase-js';
+
+// STEP 0: URL pinned to the verified production project (public URL, not a
+// secret). The runtime NEXT_PUBLIC_SUPABASE_URL on this deployment still
+// resolves to a stale legacy database for server routes — see reconciliation.
+const SUPABASE_URL = 'https://ynftzpgjsnoyjovotpua.supabase.co';
+
+function getClient() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return null;
+  return createClient(SUPABASE_URL, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
+  });
+}
 
 async function fetchAllTopics() {
   const supabase = getClient();
