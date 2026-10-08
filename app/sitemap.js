@@ -52,12 +52,16 @@ export default async function sitemap() {
 
   const articles = data || [];
 
-  const articleEntries = articles.map((a) => ({
-    url:             `${SITE_URL}${articleUrl(a.slug, a.topics?.category)}`,
-    lastModified:    new Date(a.created_at || Date.now()),
-    changeFrequency: 'monthly',
-    priority:        0.85,
-  }));
+  const articleEntries = articles
+    .map((a) => ({
+      url:             `${SITE_URL}${articleUrl(a.slug, a.topics?.category)}`,
+      lastModified:    new Date(a.created_at || Date.now()),
+      changeFrequency: 'monthly',
+      priority:        0.85,
+    }))
+    // Safeguard: never emit duplicate URLs, even if the data contains
+    // variants that collide after URL assembly.
+    .filter((entry, i, arr) => arr.findIndex(e => e.url === entry.url) === i);
 
   return [...toolEntries, ...legalEntries, ...articleEntries];
 }

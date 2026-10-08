@@ -112,7 +112,7 @@ export default function Generator({ onSaved }) {
   }
 
   async function handleGenerate(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!selectedTopic) { setError('Please select a topic.'); return; }
     setError(''); setDuplicate(null); setPreview(null); setSaved(false); setGenerating(true);
     try {
@@ -466,7 +466,14 @@ export default function Generator({ onSaved }) {
               </div>
             )}
 
-            {error && <div style={S.errBox}>{error}</div>}
+            {error && (
+              <div style={S.errBox}>
+                {error}
+                <button type="button" onClick={() => handleGenerate()} style={{ ...S.btnGhost, display: 'block', marginTop: '0.6rem', fontSize: '0.8rem' }}>
+                  ⟳ Retry generation
+                </button>
+              </div>
+            )}
 
             <button type="submit" disabled={generating} style={{ ...S.btnPrimary, opacity: generating ? 0.6 : 1 }}>
               {generating ? '⟳ Generating…' : '✦ Generate Article'}

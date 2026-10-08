@@ -99,13 +99,64 @@ function EditModal({ article, onSave, onClose }) {
   const [upgrading, setUpgrading] = useState(false);
   const [upgraded,  setUpgraded]  = useState(false);
   const [error,     setError]     = useState('');
+  const [revisions, setRevisions] = useState(null); // null = not loaded; {available, revisions}
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  // Rollback support: snapshots the live content before AI/proposal saves.
+  // Graceful — silently skips when the revisions table is not created yet.
+  async function snapshotRevision(source) {
+    try {
+      const previous = article.originalContent ?? article.content;
+      if (!previous?.trim()) return;
+      await fetch(`/api/admin/articles/${article.id}/revisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          article_id: article.id,
+          content: previous,
+          meta_title: article.meta_title,
+          meta_description: article.meta_description,
+          source,
+        }),
+      });
+    } catch { /* rollback support is best-effort */ }
+  }
+
+  async function loadRevisions() {
+    setRevisions({ available: true, revisions: [], loading: true });
+    try {
+      const res = await fetch(`/api/admin/articles/${article.id}/revisions`);
+      const data = await res.json();
+      setRevisions(data.available
+        ? { available: true, revisions: data.revisions || [], loading: false }
+        : { available: false, reason: data.reason || 'not enabled', loading: false });
+    } catch (e) {
+      setRevisions({ available: false, reason: e.message, loading: false });
+    }
+  }
+
+  function restoreRevision(rev) {
+    setForm(f => ({
+      ...f,
+      content: rev.content,
+      meta_title: rev.meta_title || f.meta_title,
+      meta_description: rev.meta_description || f.meta_description,
+    }));
+    setError('');
+  }
 
   async function handleSave(overrideStatus) {
     if (!form.title.trim() || !form.slug.trim()) { setError('Title and slug are required.'); return; }
     setSaving(true); setError('');
+    // Keep a rollback point when content actually changes (AI proposals etc.)
+    if (article._aiProposal || (article.originalContent && article.originalContent !== form.content)) {
+      snapshotRevision(article._aiProposal ? 'ai_improve' : 'manual_edit');
+    }
     const payload = { ...form };
+    delete payload._aiProposal;
+    delete payload._summary;
+    delete payload.originalContent;
     if (overrideStatus) payload.status = overrideStatus;
     try {
       const res = await fetch(`/api/admin/articles/${article.id}`, {
@@ -209,6 +260,39 @@ function EditModal({ article, onSave, onClose }) {
             value={form.content} onChange={set('content')} rows={14} disabled={busy}
             style={{ ...S.input, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5 }}
           />
+          <div style={{ marginTop: '0.5rem' }}>
+            {revisions === null ? (
+              <button onClick={loadRevisions} style={{ ...S.btn('ghost'), fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}>
+                🕘 Previous versions
+              </button>
+            ) : !revisions.available ? (
+              <span style={{ fontSize: '0.73rem', color: '#aaa' }}>Rollback not enabled (revisions table missing — see docs/migrations).</span>
+            ) : revisions.loading ? (
+              <span style={{ fontSize: '0.73rem', color: '#aaa' }}>Loading previous versions…</span>
+            ) : revisions.revisions.length === 0 ? (
+              <span style={{ fontSize: '0.73rem', color: '#aaa' }}>No previous versions yet — one is captured automatically before AI-proposal saves.</span>
+            ) : (
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: '0.78rem', color: '#8b7355' }}>
+                  🕘 Previous versions ({revisions.revisions.length}) — click to restore
+                </summary>
+                <div style={{ marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {revisions.revisions.map(r => (
+                    <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: '#6b6b6b' }}>
+                      <span>{new Date(r.created_at).toLocaleString()} · {r.source} · {r.words} words</span>
+                      <button
+                        onClick={() => restoreRevision(r)}
+                        title="Load this version into the editor (still requires Save to apply)"
+                        style={{ ...S.btn('ghost'), fontSize: '0.7rem', padding: '0.15rem 0.5rem' }}
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
@@ -457,12 +541,14 @@ export default function Articles({ initialArticleId = null }) {
         setToast({ status: 'error', message: data.error || 'Something went wrong' });
       } else {
         // Review-first: load the AI proposal into the editor — nothing is
-        // saved until the user explicitly saves in the editor.
+        // saved until the user explicitly saves in the editor. The current
+        // live version is kept for the rollback snapshot on save.
         setEditing({
           ...article,
-          content:      data.content,
-          _aiProposal:  true,
-          _summary:     data.summary,
+          originalContent: article.content,
+          content:         data.content,
+          _aiProposal:     true,
+          _summary:        data.summary,
         });
         setToast({ status: 'success', message: `"${article.title}" — AI proposal loaded into the editor. Review, then Save.` });
       }
