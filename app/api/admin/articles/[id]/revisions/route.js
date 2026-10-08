@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '../../../../../lib/supabaseAdminClient.js';
+import { supabaseAdmin as supabase } from '../../../../../../lib/supabaseAdminClient.js';
 
 // Article revisions — rollback support for AI/content edits.
 // Graceful by design: if the article_revisions table has not been created
