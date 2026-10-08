@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -13,7 +14,11 @@ function getClient() {
   if (!key) return null;
   return createClient(SUPABASE_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
+    global: { fetch: (input, init) => fetch(input, {
+      ...init,
+      cache: 'no-store',
+      headers: { ...(init && init.headers), 'x-step0-nocache': String(Date.now()) },
+    }) },
   });
 }
 
