@@ -324,6 +324,7 @@ export default function Articles({ initialArticleId = null }) {
     return () => { cancelled = true; };
   }, [initialArticleId, loading, articles, autoOpenedId]);
 
+  const displayArticles = useMemo(() => {
     if (filterSpecial === 'thin')    return articles.filter(a => isThinArticle(a.content));
     if (filterSpecial === 'no-meta') return articles.filter(a => !a.meta_description?.trim());
     return articles;
