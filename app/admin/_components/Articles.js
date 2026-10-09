@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { extractReferences, verifyReferencesInHtml } from '../../../lib/verseValidation.js';
 
 const BADGE = {
   published: { background: '#dcf5e7', color: '#1b5e20' },
@@ -146,6 +147,20 @@ function EditModal({ article, onSave, onClose }) {
     setError('');
   }
 
+  // Phase 4: verify every Bible reference in the editor content against the
+  // KJV source. Advisory only — never blocks editing or saving.
+  const [validating,    setValidating]    = useState(false);
+  const [refValidation, setRefValidation] = useState(null);
+
+  async function validateBibleRefs() {
+    setValidating(true);
+    try {
+      setRefValidation(await verifyReferencesInHtml(form.content));
+    } catch (e) {
+      setRefValidation({ checked: 0, verified: 0, unverified: [], error: e.message });
+    } finally { setValidating(false); }
+  }
+
   async function handleSave(overrideStatus) {
     if (!form.title.trim() || !form.slug.trim()) { setError('Title and slug are required.'); return; }
     setSaving(true); setError('');
@@ -269,6 +284,24 @@ function EditModal({ article, onSave, onClose }) {
             value={form.content} onChange={set('content')} rows={14} disabled={busy}
             style={{ ...S.input, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5 }}
           />
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={validateBibleRefs} disabled={validating}
+              title="Checks every Bible reference in the content against the KJV source (bible-api.com)"
+              style={{ ...S.btn('ghost'), fontSize: '0.75rem', padding: '0.25rem 0.6rem', opacity: validating ? 0.6 : 1 }}
+            >
+              {validating ? '⟳ Verifying…' : '📖 Validate Bible references'}
+            </button>
+            {refValidation && (
+              <span style={{ fontSize: '0.78rem', color: refValidation.unverified?.length ? '#b45309' : '#15803d' }}>
+                {refValidation.checked === 0
+                  ? 'No Bible references detected.'
+                  : refValidation.unverified?.length === 0
+                    ? `✓ ${refValidation.verified}/${refValidation.checked} verified against KJV.`
+                    : `⚠ ${refValidation.verified}/${refValidation.checked} verified — check: ${refValidation.unverified.join(', ')}`}
+              </span>
+            )}
+          </div>
           <div style={{ marginTop: '0.5rem' }}>
             {revisions === null ? (
               <button onClick={loadRevisions} style={{ ...S.btn('ghost'), fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}>

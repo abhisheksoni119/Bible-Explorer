@@ -30,10 +30,25 @@ function check(name, cond, detail) {
   const smUrls = (smText.match(/<loc>/g) || []).length;
   check('/sitemap.xml has published URLs', sm.status === 200 && smUrls >= 290, `HTTP ${sm.status}, ${smUrls} URLs`);
 
-  // Sample article (first guide link)
+  // Sample article (first guide link) — also verifies SEO basics:
+  // canonical tag present, no accidental noindex, internal links resolve.
   if (guideLinks[0]) {
     const a = await fetch(BASE + guideLinks[0]);
+    const ah = await a.text();
+    const hasCanonical = ah.includes('rel="canonical"') || ah.includes("rel='canonical'");
+    const noindexSelf = /<meta[^>]+name=["']robots["'][^>]*content=["'][^"']*noindex/i.test(ah);
     check('sample article ' + guideLinks[0], a.status === 200, 'HTTP ' + a.status);
+    check('sample article canonical tag', hasCanonical, hasCanonical ? 'canonical present' : 'canonical MISSING');
+    check('sample article not noindexed', !noindexSelf, noindexSelf ? 'noindex found on public article' : 'indexable');
+
+    // Internal-link spot check: up to 5 same-site links from the article body
+    const internal = [...new Set([...ah.matchAll(/href="(\/(?:guides|questions|topics|bible-verses|bible-characters)\/[a-z0-9-]+\/)"/g)].map(m => m[1]))].slice(0, 5);
+    let broken = 0;
+    for (const link of internal) {
+      const lr = await fetch(BASE + link);
+      if (lr.status !== 200) { broken++; console.log('   broken internal link: ' + link + ' -> HTTP ' + lr.status); }
+    }
+    check('internal links resolve (' + internal.length + ' checked)', broken === 0, broken + ' broken of ' + internal.length);
   }
 
   // Sample question page (first questions link)
