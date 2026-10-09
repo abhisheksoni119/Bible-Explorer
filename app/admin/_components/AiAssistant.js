@@ -81,7 +81,8 @@ export default function AiAssistant() {
   const [running,   setRunning]   = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [error,     setError]     = useState('');
-  const [result,    setResult]    = useState(null); // { status: 'inserted'|'duplicate', topic?, candidate, duplicate? }
+  const [result,    setResult]    = useState(null); // { status: 'proposed'|'inserted'|'duplicate', topic?, candidate, duplicate? }
+  const [approving, setApproving]  = useState(false);
 
   const timeoutRef = useRef(null);
 
@@ -143,12 +144,40 @@ export default function AiAssistant() {
       }
 
       setStepIndex(STEPS.length - 1);
-      setResult({ status: 'inserted', topic: data.topic, candidate: data.candidate });
+      // Approval-first: research returns a PROPOSAL. Nothing is inserted
+      // until the user clicks Approve (handleApprove below).
+      setResult({ status: 'proposed', candidate: data.candidate, evidenceNote: data.evidenceNote });
     } catch (err) {
       console.error('[AiAssistant] network error:', err); // dev console only — never rendered
       setError(friendlyErrorMessage(0, null));
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!result?.candidate) return;
+    setApproving(true); setError('');
+    try {
+      const res = await fetch('/api/admin/ai-assistant/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate: result.candidate }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        setResult({ status: 'duplicate', candidate: result.candidate, duplicate: data.duplicate });
+        return;
+      }
+      if (!res.ok) {
+        setError(data.error || 'Approval failed — the topic was not added.');
+        return;
+      }
+      setResult({ status: 'inserted', topic: data.topic, candidate: result.candidate });
+    } catch {
+      setError(friendlyErrorMessage(0, null));
+    } finally {
+      setApproving(false);
     }
   }
 
@@ -223,6 +252,66 @@ export default function AiAssistant() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Proposal screen (approval gate — nothing saved yet) ── */}
+      {result?.status === 'proposed' && !running && (
+        <div style={{ ...S.card, border: '1px solid #fde68a', background: '#fffbeb' }}>
+          <p style={{ margin: '0 0 0.4rem', fontWeight: '700', fontSize: '1.05rem', color: '#854d0e' }}>
+            ✦ Proposed topic — nothing is saved yet
+          </p>
+          <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#6b6b6b' }}>
+            Review the researched suggestion below, then Approve to add it to your Topics, or Discard.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={S.metaBox}>
+              <p style={S.metaLabel}>Topic Name</p>
+              <p style={S.metaVal}>{result.candidate?.name}</p>
+            </div>
+            <div style={S.metaBox}>
+              <p style={S.metaLabel}>Category</p>
+              <p style={S.metaVal}><span style={S.badge}>{categoryLabel(result.candidate?.category)}</span></p>
+            </div>
+            <div style={S.metaBox}>
+              <p style={S.metaLabel}>Suggested Slug</p>
+              <p style={{ ...S.metaVal, fontFamily: 'monospace', fontSize: '0.8rem' }}>{result.candidate?.slug}</p>
+            </div>
+            <div style={S.metaBox}>
+              <p style={S.metaLabel}>Detected Intent</p>
+              <p style={S.metaVal}>{result.candidate?.intent?.type || '—'}</p>
+            </div>
+          </div>
+
+          {result.candidate?.reasoning && (
+            <div style={{ ...S.metaBox, marginBottom: '1rem' }}>
+              <p style={S.metaLabel}>Why this topic (AI reasoning)</p>
+              <p style={{ ...S.metaVal, fontSize: '0.85rem' }}>{result.candidate.reasoning}</p>
+            </div>
+          )}
+
+          {result.candidate?.keywords?.length > 0 && (
+            <div style={{ ...S.metaBox, marginBottom: '1rem' }}>
+              <p style={S.metaLabel}>Related keywords (AI-inferred)</p>
+              <p style={{ ...S.metaVal, fontSize: '0.85rem' }}>{result.candidate.keywords.join(', ')}</p>
+            </div>
+          )}
+
+          <p style={{ margin: '0 0 1.25rem', fontSize: '0.78rem', color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '0.4rem', padding: '0.5rem 0.75rem' }}>
+            ⚠ Evidence note: {result.evidenceNote || 'This suggestion is AI/semantic-based, not verified search demand. Any volume/difficulty figures are AI estimates.'}
+          </p>
+
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button onClick={reset} style={S.btnGhost}>Discard</button>
+            <button
+              onClick={handleApprove}
+              disabled={approving}
+              style={{ ...S.btnGold, opacity: approving ? 0.6 : 1 }}
+            >
+              {approving ? 'Approving…' : '✓ Approve & Add Topic'}
+            </button>
           </div>
         </div>
       )}

@@ -6,6 +6,10 @@
 // existing runResearch() orchestrator exactly as implemented, translate its
 // Result<RunResearchOutcome, AppError> into an HTTP response. No business
 // logic lives here — the engine in ai-assistant/ is used as-is.
+//
+// APPROVAL-FIRST: research never inserts. It returns a fully-validated
+// proposal (status 'proposed'). Insertion happens only through the sibling
+// /approve endpoint after a human reviews the candidate.
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +17,6 @@ import { NextResponse } from 'next/server';
 import { runResearch, RunResearchInput } from '../../../../../ai-assistant/orchestrator';
 import { AppError, AppErrorCode } from '../../../../../ai-assistant/utils/errors';
 
-// Maps the engine's typed error codes to HTTP status codes. Mirrors the
-// existing convention elsewhere in this codebase of using 409 for "found a
-// duplicate, didn't save" (see app/api/admin/articles POST) — applied here
-// via the 'duplicate' outcome branch below, not via this error map, since
-// DuplicateService reports duplicates as a normal Ok result, not an AppError.
 const ERROR_STATUS: Record<AppErrorCode, number> = {
   VALIDATION_ERROR: 400,
   CONFIGURATION_ERROR: 500,
@@ -49,6 +48,9 @@ export async function POST(request: Request) {
     seedQuery: body.seedQuery,
     language: typeof body.language === 'string' ? body.language : undefined,
     relatedTopicId: typeof body.relatedTopicId === 'string' ? body.relatedTopicId : null,
+    // Proposal-only: the research pipeline validates the candidate but never
+    // inserts. Approval is a separate, explicit user action.
+    dryRun: true,
   };
 
   const result = await runResearch(input);
@@ -70,12 +72,23 @@ export async function POST(request: Request) {
     );
   }
 
+  if (outcome.status === 'proposed') {
+    return NextResponse.json(
+      {
+        status: 'proposed',
+        candidate: outcome.candidate,
+        // Honest evidence labelling: all keyword metrics in this pipeline are
+        // AI-inferred estimates — there is no live search-data provider.
+        evidenceNote: 'Topic suggestion is AI/semantic-based. Keyword volume/difficulty figures (if shown) are AI-inferred estimates, NOT verified search data.',
+        message: 'Proposal ready — review, then approve to add this topic.',
+      },
+      { status: 200 },
+    );
+  }
+
+  // Defensive: the orchestrator in dryRun mode never reaches 'inserted'.
   return NextResponse.json(
-    {
-      status: 'inserted',
-      topic: outcome.topic,
-      candidate: outcome.candidate,
-    },
+    { status: outcome.status, topic: (outcome as { topic?: unknown }).topic, candidate: outcome.candidate },
     { status: 201 },
   );
 }

@@ -56,6 +56,7 @@ export type RunResearchInput = ResearchInput;
  */
 export type RunResearchOutcome =
   | { status: 'inserted'; topic: TopicRow; candidate: TopicCandidate }
+  | { status: 'proposed'; candidate: TopicCandidate }
   | { status: 'duplicate'; duplicate: DuplicateCheckResult; candidate: TopicCandidate };
 
 export async function runResearch(
@@ -138,6 +139,15 @@ export async function runResearch(
     // output, not an AppError. The pipeline halts before InsertService,
     // but returns Ok so the caller can inspect what was found.
     return ok({ status: 'duplicate', duplicate: duplicateResult.value, candidate });
+  }
+
+  // ── Approval gate ────────────────────────────────────────────────────────
+  // dryRun (default for the admin API): return the fully-validated candidate
+  // as a PROPOSAL. Nothing is inserted until a human approves it through the
+  // approve endpoint. This satisfies the research → review → approval
+  // workflow requirement; the engine's stages are otherwise unchanged.
+  if (input.dryRun) {
+    return ok({ status: 'proposed', candidate });
   }
 
   // ── Insert into topics ───────────────────────────────────────────────────
