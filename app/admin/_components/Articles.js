@@ -383,6 +383,7 @@ export default function Articles({ initialArticleId = null }) {
   const [actioning,     setActioning]     = useState(null);
   const [improving,     setImproving]     = useState(new Set());
   const [relinking,     setRelinking]     = useState(false);
+  const [linkPreview,  setLinkPreview]   = useState(null);
   const [importing,     setImporting]     = useState(false);
   const [fixingDrafts,  setFixingDrafts]  = useState(false);
   const [pinging,       setPinging]       = useState(false);
@@ -553,15 +554,43 @@ export default function Articles({ initialArticleId = null }) {
     setToast({ status: 'success', message: `"${updated.title}" saved successfully.` });
   }
 
+  // Review-first interlinking: compute the proposal, show it in a modal,
+  // and persist only when the user clicks Apply.
   async function interlinkOne(article) {
     setInterlinking(prev => new Set([...prev, article.id])); setToast(null);
     try {
-      const res  = await fetch(`/api/admin/articles/${article.id}/interlink`, { method: 'POST' });
+      const res  = await fetch(`/api/admin/articles/${article.id}/interlink`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preview: true }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setToast({ status: 'error', message: data.error || 'Interlinking failed' });
       } else if (data.skipped) {
         setToast({ status: 'success', message: data.message });
+      } else {
+        setLinkPreview({
+          kind: 'single',
+          article,
+          linksAdded: data.linksAdded || 0,
+          anchors: data.anchors || [],
+          applying: false,
+        });
+      }
+    } catch (err) { setToast({ status: 'error', message: err.message }); }
+    finally { setInterlinking(prev => { const s = new Set(prev); s.delete(article.id); return s; }); }
+  }
+
+  async function applyInterlinkOne(article) {
+    setInterlinking(prev => new Set([...prev, article.id])); setLinkPreview(null);
+    try {
+      const res  = await fetch(`/api/admin/articles/${article.id}/interlink`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apply: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setToast({ status: 'error', message: data.error || 'Interlinking failed' });
       } else {
         setArticles(prev => prev.map(a => a.id === data.id ? { ...a, ...data } : a));
         setToast({ status: 'success', message: `"${article.title}" — ${data.message}` });
@@ -570,11 +599,24 @@ export default function Articles({ initialArticleId = null }) {
     finally { setInterlinking(prev => { const s = new Set(prev); s.delete(article.id); return s; }); }
   }
 
-
-  async function relinkAll() {
+  async function relinkAllPreview() {
     setRelinking(true); setToast(null);
     try {
-      const res  = await fetch('/api/admin/articles/relink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const res  = await fetch('/api/admin/articles/relink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preview: true }) });
+      const data = await res.json();
+      if (!res.ok) {
+        setToast({ status: 'error', message: data.error || 'Re-link failed' });
+      } else {
+        setLinkPreview({ kind: 'bulk', results: data.results || [], total: data.totalArticles || 0, applying: false });
+      }
+    } catch (err) { setToast({ status: 'error', message: err.message }); }
+    finally { setRelinking(false); }
+  }
+
+  async function relinkAllApply() {
+    setRelinking(true); setLinkPreview(null); setToast(null);
+    try {
+      const res  = await fetch('/api/admin/articles/relink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apply: true }) });
       const data = await res.json();
       if (!res.ok) {
         setToast({ status: 'error', message: data.error || 'Re-link failed' });
@@ -661,6 +703,67 @@ export default function Articles({ initialArticleId = null }) {
   return (
     <div>
       {toast       && <Toast toast={toast} onClose={() => setToast(null)} />}
+      {linkPreview && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#fff', borderRadius: '1rem', padding: '1.5rem', maxWidth: '640px', width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <p style={{ margin: '0 0 0.4rem', fontWeight: '700', fontSize: '1.05rem', color: '#1e2d4a' }}>
+              {linkPreview.kind === 'single' ? 'Interlink proposal — review before applying' : 'Re-link proposal — review before applying'}
+            </p>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#6b6b6b' }}>
+              {linkPreview.kind === 'single'
+                ? `${linkPreview.linksAdded} internal link(s) would be added to "${linkPreview.article.title}". Nothing is saved yet.`
+                : `${linkPreview.results.filter(r => r.linksAdded > 0).length} of ${linkPreview.total} published articles would receive new internal links. Nothing is saved yet.`}
+            </p>
+            <div style={{ maxHeight: '320px', overflowY: 'auto', border: '1px solid #e8dfc8', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem' }}>
+              {linkPreview.kind === 'single' ? (
+                linkPreview.anchors.length === 0
+                  ? <p style={{ margin: 0, color: '#8b7355', fontSize: '0.85rem' }}>No anchors available to preview.</p>
+                  : linkPreview.anchors.map((a, i) => (
+                      <p key={i} style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#2a2a2a' }}>• {a}</p>
+                    ))
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: '#6b6b6b' }}>
+                      <th style={{ padding: '0.3rem 0.5rem' }}>Article</th>
+                      <th style={{ padding: '0.3rem 0.5rem' }}>New links</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkPreview.results.map(r => (
+                      <tr key={r.id}>
+                        <td style={{ padding: '0.3rem 0.5rem', color: r.error ? '#7b2020' : '#2a2a2a' }}>
+                          {r.title || r.slug}{r.error ? ` — error: ${r.error}` : ''}
+                        </td>
+                        <td style={{ padding: '0.3rem 0.5rem', color: r.linksAdded > 0 ? '#1b5e20' : '#8b7355' }}>
+                          {r.linksAdded > 0 ? '+' + r.linksAdded : '0'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setLinkPreview(null)}
+                style={{ ...S.btn('ghost'), padding: '0.5rem 1rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => linkPreview.kind === 'single'
+                  ? applyInterlinkOne(linkPreview.article)
+                  : relinkAllApply()}
+                disabled={linkPreview.applying}
+                style={{ ...S.btn('publish'), padding: '0.5rem 1.25rem', opacity: linkPreview.applying ? 0.6 : 1 }}
+              >
+                {linkPreview.applying ? 'Applying…' : 'Apply changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {editing     && <EditModal article={editing} onSave={handleEditSaved} onClose={() => setEditing(null)} />}
       {deleting    && (
         <ConfirmModal
@@ -717,7 +820,7 @@ export default function Articles({ initialArticleId = null }) {
         <button onClick={loadArticles} style={{ ...S.btn('default'), padding: '0.4rem 0.85rem' }}>↻ Refresh</button>
 
         <button
-          onClick={relinkAll} disabled={relinking}
+          onClick={relinkAllPreview} disabled={relinking}
           title="Strip old enrichment and re-run internal linking on all published articles"
           style={{ ...S.btn('improve'), padding: '0.4rem 0.85rem', opacity: relinking ? 0.6 : 1 }}
         >

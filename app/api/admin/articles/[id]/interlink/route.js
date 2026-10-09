@@ -19,6 +19,10 @@ import { stripArticleLinks, enrichContent } from '../../../../../../lib/seoEnric
 export async function POST(_req, { params }) {
   try {
     const { id } = await params;
+    const body = await _req.json().catch(() => ({}));
+    // Review-first: default is preview (compute + report, save nothing).
+    // apply=true snapshots the live version and persists the relinked content.
+    const apply = body.apply === true;
 
     // 1. Fetch the target article
     const { data: article, error: artErr } = await supabase
@@ -43,13 +47,38 @@ export async function POST(_req, { params }) {
     const parentTopicId = poolEntry?.parent_topic_id || null;
 
     // 5. Smart interlinking
-    const { html: linked, linksAdded } = interlinkArticle(
+    const { html: linked, linksAdded, inlineAnchors, insertAnchors } = interlinkArticle(
       { ...article, content: stripped, category, parentTopicId },
       pool
     );
 
     // 5. Re-inject Bible verse blockquotes + /bible/ reference links
     const { html } = await enrichContent(linked);
+
+    // ── Preview mode: report the proposal, save nothing ───────────────────
+    if (!apply) {
+      const anchors = [...inlineAnchors, ...insertAnchors].slice(0, 12);
+      return NextResponse.json({
+        preview: true,
+        id,
+        slug: article.slug,
+        title: article.title,
+        linksAdded,
+        anchors,
+        message: `Preview: ${linksAdded} internal link(s) would be added to "${article.title}".`,
+      });
+    }
+
+    // ── Apply mode: rollback snapshot, then save ──────────────────────────
+    try {
+      await supabase.from('article_revisions').insert({
+        article_id: id,
+        content: article.content || '',
+        meta_title: article.meta_title || null,
+        meta_description: null,
+        source: 'interlink',
+      });
+    } catch { /* revisions table optional */ }
 
     // 6. Save back
     let saved, saveErr;
