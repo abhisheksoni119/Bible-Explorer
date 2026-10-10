@@ -32,6 +32,13 @@ async function main() {
   result.dbHost = host; // host contains the public project ref — not a secret
   result.dbReferencesYnftz = url.includes('ynftzpgjsnoyjovotpua'); // ref lives in the username of pooler URIs; checked, never printed
 
+  // Secret-free password diagnostics: placeholder / double-encoding detection.
+  // Never prints the password — only booleans and length.
+  const pwPart = (url.match(/:\/\/[^:@]+:([^@]+)@/) || [])[1] || '';
+  result.pwIsPlaceholder = /YOUR-PASSWORD/i.test(pwPart);
+  result.pwHasDoubleEncoding = pwPart.includes('%25');
+  result.pwLength = pwPart.length;
+
   const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   try {
     await client.connect();
