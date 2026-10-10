@@ -27,7 +27,7 @@ async function main() {
   }
 
   const host = (url.match(/@([^:/?]+)/) || [])[1] || '(unparsable)';
-  const user = (url.match(/://([^:@]+):/) || [])[1] || '(unparsable)';
+  const user = (url.match(/:\/\/([^:@]+):/) || [])[1] || '(unparsable)';
   result.dbUser = decodeURIComponent(user); // username is postgres.<public-ref> — not a secret
   result.dbHost = host; // host contains the public project ref — not a secret
   result.dbReferencesYnftz = url.includes('ynftzpgjsnoyjovotpua'); // ref lives in the username of pooler URIs; checked, never printed
