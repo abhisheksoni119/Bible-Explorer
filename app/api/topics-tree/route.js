@@ -92,29 +92,40 @@ export async function GET(request) {
   const all      = data || [];
   const filtered = category ? all.filter(t => t.category === category) : all;
 
-  const parents  = filtered.filter(t => !t.parent_id).sort((a, b) => a.name.localeCompare(b.name));
-  const children = filtered.filter(t =>  t.parent_id);
-
-  const childMap = {};
-  for (const c of children) {
-    if (!childMap[c.parent_id]) childMap[c.parent_id] = [];
-    childMap[c.parent_id].push(buildNode(c, countMap));
+  // ── Recursive tree construction (any depth) ──────────────────────────────
+  // The previous two-level builder silently dropped every topic below depth 2
+  // (grandchildren and deeper), which is why the admin showed only the
+  // parentless roots. Attach children recursively with a visited-set guard
+  // so a corrupted parent cycle can never cause infinite recursion.
+  const byParent = new Map();
+  for (const t of filtered) {
+    if (!t.parent_id) continue;
+    if (!byParent.has(t.parent_id)) byParent.set(t.parent_id, []);
+    byParent.get(t.parent_id).push(t);
   }
-  for (const id of Object.keys(childMap)) {
-    childMap[id].sort((a, b) => a.name.localeCompare(b.name));
+  for (const list of byParent.values()) {
+    list.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const idSet = new Set(filtered.map(t => t.id));
+
+  function attach(t, branchVisited) {
+    const kids = (byParent.get(t.id) || [])
+      .filter(k => !branchVisited.has(k.id)) // cycle guard
+      .map(k => attach(k, new Set([...branchVisited, k.id])));
+    return { ...buildNode(t, countMap), children: kids };
   }
 
-  const hierarchy = parents.map(p => ({
-    ...buildNode(p, countMap),
-    children: childMap[p.id] || [],
-  }));
+  // Roots = parentless topics, plus orphans whose parent is missing from the
+  // filtered set (rendered at top level, flagged) — preserves old behavior.
+  const roots = filtered
+    .filter(t => !t.parent_id || !idSet.has(t.parent_id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const orphans = children.filter(c => !filtered.find(p => p.id === c.parent_id));
-  const orphanNodes = orphans.map(o => ({
-    ...buildNode(o, countMap),
-    children: [],
-    _orphan:  true,
-  }));
+  const tree = roots.map(t => {
+    const node = attach(t, new Set([t.id]));
+    if (t.parent_id && !idSet.has(t.parent_id)) node._orphan = true;
+    return node;
+  });
 
-  return NextResponse.json([...hierarchy, ...orphanNodes]);
+  return NextResponse.json(tree);
 }

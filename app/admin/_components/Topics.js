@@ -165,6 +165,23 @@ export default function Topics() {
 
   const q = search.trim().toLowerCase();
 
+  // Recursive transforms — the hierarchy can be any depth.
+  function pruneToNotCreated(n) {
+    const kids = n.children.map(pruneToNotCreated).filter(k => !k.is_created || k.children.length > 0);
+    return { ...n, children: kids };
+  }
+  function searchPrune(n) {
+    const selfMatch = n.name.toLowerCase().includes(q);
+    const kids = n.children.map(searchPrune).filter(Boolean);
+    if (!selfMatch && kids.length === 0) return null;
+    // Self match keeps the whole subtree; otherwise keep only matching branches.
+    return selfMatch
+      ? { ...n, _forceOpen: true }
+      : { ...n, children: kids, _forceOpen: true };
+  }
+  function countTree(n)  { return 1 + n.children.reduce((s, c) => s + countTree(c), 0); }
+  function countCreated(n) { return (n.is_created ? 1 : 0) + n.children.reduce((s, c) => s + countCreated(c), 0); }
+
   const visibleNodes = useMemo(() => {
     let nodes = tabNodes;
 
@@ -174,30 +191,19 @@ export default function Topics() {
 
     if (!showCreated) {
       nodes = nodes
-        .map(n => ({
-          ...n,
-          children: n.children.filter(c => !c.is_created),
-        }))
+        .map(pruneToNotCreated)
         .filter(n => !n.is_created || n.children.length > 0);
     }
 
     if (q) {
-      nodes = nodes
-        .map(n => {
-          const parentMatch = n.name.toLowerCase().includes(q);
-          const matchedChildren = n.children.filter(c => c.name.toLowerCase().includes(q));
-          if (!parentMatch && matchedChildren.length === 0) return null;
-          return { ...n, children: parentMatch ? n.children : matchedChildren, _forceOpen: true };
-        })
-        .filter(Boolean);
+      nodes = nodes.map(searchPrune).filter(Boolean);
     }
 
     return nodes;
   }, [tabNodes, filterParent, showCreated, q]);
 
-  const totalInTab  = tabNodes.length + tabNodes.reduce((s, n) => s + n.children.length, 0);
-  const createdInTab = tabNodes.filter(n => n.is_created).length
-    + tabNodes.flatMap(n => n.children).filter(c => c.is_created).length;
+  const totalInTab   = tabNodes.reduce((s, n) => s + countTree(n), 0);
+  const createdInTab = tabNodes.reduce((s, n) => s + countCreated(n), 0);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '1.5rem', alignItems: 'start' }}>
@@ -315,60 +321,76 @@ export default function Topics() {
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              {visibleNodes.map(node => {
-                const isOpen = expanded[node.id] || node._forceOpen || !!filterParent || !!q;
-                const hasChildren = node.children.length > 0;
-                return (
-                  <div key={node.id}>
-                    {/* Parent row */}
-                    <div style={{ display: 'flex', alignItems: 'stretch', gap: '0.375rem', marginBottom: hasChildren && isOpen ? '0.25rem' : 0 }}>
-                      {hasChildren && (
-                        <button
-                          onClick={() => toggleExpand(node.id)}
-                          title={isOpen ? 'Collapse' : 'Expand'}
-                          style={{
-                            background: '#f0ece4', border: '1px solid #e8dfc8', borderRadius: '0.375rem',
-                            cursor: 'pointer', padding: '0 0.6rem', fontSize: '0.8rem', color: '#5a4a35',
-                            flexShrink: 0, lineHeight: 1,
-                          }}
-                        >
-                          {isOpen ? '▾' : '▸'}
-                        </button>
-                      )}
-                      {!hasChildren && <div style={{ width: '2rem', flexShrink: 0 }} />}
-                      <div style={{ flex: 1 }}>
-                        <TopicRow
-                          t={node}
-                          indent={false}
-                          pillarLoading={pillarLoading}
-                          onTogglePillar={togglePillar}
-                          query={q}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Children */}
-                    {isOpen && hasChildren && (
-                      <div style={{ marginLeft: '2.375rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.25rem' }}>
-                        {node.children.map(child => (
-                          <TopicRow
-                            key={child.id}
-                            t={child}
-                            indent
-                            pillarLoading={pillarLoading}
-                            onTogglePillar={togglePillar}
-                            query={q}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {visibleNodes.map(node => (
+                <TreeNode
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  expanded={expanded}
+                  toggleExpand={toggleExpand}
+                  forceOpen={!!filterParent || !!q}
+                  pillarLoading={pillarLoading}
+                  onTogglePillar={togglePillar}
+                  query={q}
+                />
+              ))}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Recursive tree node — renders any hierarchy depth, one indent level each.
+function TreeNode({ node, depth, expanded, toggleExpand, forceOpen, pillarLoading, onTogglePillar, query }) {
+  const isOpen = expanded[node.id] || node._forceOpen || forceOpen;
+  const hasChildren = node.children.length > 0;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: '0.375rem', marginBottom: hasChildren && isOpen ? '0.25rem' : 0 }}>
+        {hasChildren && (
+          <button
+            onClick={() => toggleExpand(node.id)}
+            title={isOpen ? 'Collapse' : 'Expand'}
+            style={{
+              background: '#f0ece4', border: '1px solid #e8dfc8', borderRadius: '0.375rem',
+              cursor: 'pointer', padding: '0 0.6rem', fontSize: '0.8rem', color: '#5a4a35',
+              flexShrink: 0, lineHeight: 1,
+            }}
+          >
+            {isOpen ? '▾' : '▸'}
+          </button>
+        )}
+        {!hasChildren && <div style={{ width: '2rem', flexShrink: 0 }} />}
+        <div style={{ flex: 1 }}>
+          <TopicRow
+            t={node}
+            indent={depth > 0}
+            pillarLoading={pillarLoading}
+            onTogglePillar={onTogglePillar}
+            query={query}
+          />
+        </div>
+      </div>
+
+      {isOpen && hasChildren && (
+        <div style={{ marginLeft: '2.375rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.25rem' }}>
+          {node.children.map(child => (
+            <TreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              expanded={expanded}
+              toggleExpand={toggleExpand}
+              forceOpen={forceOpen}
+              pillarLoading={pillarLoading}
+              onTogglePillar={onTogglePillar}
+              query={query}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
