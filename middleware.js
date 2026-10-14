@@ -69,15 +69,6 @@ export async function middleware(request) {
     return NextResponse.redirect(url, { status: 301 });
   }
 
-  // German-to-English cleanup (2026-10-15): permanent redirect for the
-  // renamed Bible-study guide. Placed BEFORE the trailing-slash rule so both
-  // slash variants redirect in a single hop (no chain, no loop).
-  if (pathname === '/guides/practical-guide-to-bibelstudium' || pathname === '/guides/practical-guide-to-bibelstudium/') {
-    const url = request.nextUrl.clone();
-    url.pathname = '/guides/practical-guide-to-bible-study/';
-    return NextResponse.redirect(url, { status: 301 });
-  }
-
   if (!pathname.endsWith('/')) {
     const url = request.nextUrl.clone();
     url.pathname = pathname + '/';

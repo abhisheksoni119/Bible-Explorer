@@ -16,6 +16,11 @@ const nextConfig = {
       ['bible-verses-about-being-thankful-2',   'bible-verses-about-being-thankful'],
     ];
     return [
+      // German-to-English cleanup (2026-10-15): 301 for the renamed
+      // Bible-study guide. Defined here (before trailing-slash normalisation)
+      // so both slash variants redirect in a single hop.
+      { source: '/guides/practical-guide-to-bibelstudium',  destination: '/guides/practical-guide-to-bible-study/', statusCode: 301 },
+      { source: '/guides/practical-guide-to-bibelstudium/', destination: '/guides/practical-guide-to-bible-study/', statusCode: 301 },
       // Topic slug corrections
       { source: '/topics/god-response-to-repentance',  destination: '/topics/gods-response-to-repentance', permanent: true },
       { source: '/topics/god-response-to-repentance/', destination: '/topics/gods-response-to-repentance', permanent: true },
